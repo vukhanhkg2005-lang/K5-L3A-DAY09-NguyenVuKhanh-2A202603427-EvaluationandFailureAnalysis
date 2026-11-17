@@ -38,23 +38,63 @@ def sha12(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
 
 
+DEFAULT_FM_MAP: dict[str, list[str]] = {
+    "C-001": ["FM-01"],
+    "C-002": ["FM-03"],
+    "C-003": ["FM-04"],
+    "C-004": ["FM-01"],
+    "C-005": ["FM-01", "FM-09"],
+    "C-006": ["FM-06"],
+    "C-007": ["FM-02"],
+    "C-008": ["FM-02"],
+    "C-009": ["FM-03"],
+    "C-010": ["FM-01"],
+    "C-011": ["FM-05"],
+    "C-012": ["FM-05"],
+    "C-013": ["FM-05"],
+    "C-014": ["FM-04", "FM-05"],
+}
+
+
 def build(source: Path = SOURCE) -> tuple[int, int]:
     claims = load_jsonl(source)
+    # Load labels_v1.json if it exists to get failure_modes
+    labels_existing: dict[str, Any] = {}
+    if LABELS.is_file():
+        try:
+            labels_existing = json.loads(LABELS.read_text(encoding="utf-8"))
+        except Exception:
+            labels_existing = {}
+
     items, labels = [], {}
     for n, claim in enumerate(claims, start=1):
         item_id = f"E-{n:03d}"
+        cid = claim["claim_id"]
+        # TODO M1: replace [] with the FM-xx codes from your taxonomy that this item exercises.
+        # Load failure_modes from labels_v1.json, fallback to DEFAULT_FM_MAP
+        fm = labels_existing.get(cid, {}).get("failure_modes")
+        if fm is None:
+            fm = DEFAULT_FM_MAP.get(cid, [])
+        if not isinstance(fm, list):
+            raise TypeError(f"failure_modes for {cid} must be a list, got {type(fm).__name__}")
+        for code in fm:
+            if not FM_CODE.fullmatch(str(code)):
+                raise ValueError(f"Invalid failure-mode code {code!r} for {cid}")
+
         items.append({
             "item_id": item_id,
-            "claim_id": claim["claim_id"],
-            # TODO M1: replace [] with the FM-xx codes from your taxonomy that this item exercises.
-            "failure_modes": [],
+            "claim_id": cid,
+            "failure_modes": fm,
             "provenance": {"source": "lab8_public", "matrix_id": claim.get("matrix_id"),
                            "from_trace": None, "generator": None,
                            "label_by": "lab8_matrix", "checked_by": None},
             "split": "regression",
             "eval_set_version": VERSION,
         })
-        labels[claim["claim_id"]] = claim["expected"]
+        lbl = dict(claim["expected"])
+        if cid in labels_existing and "failure_modes" in labels_existing[cid]:
+            lbl["failure_modes"] = labels_existing[cid]["failure_modes"]
+        labels[cid] = lbl
     ITEMS.parent.mkdir(parents=True, exist_ok=True)
     ITEMS.write_text("".join(json.dumps(i, ensure_ascii=False) + "\n" for i in items), encoding="utf-8")
     LABELS.write_text(json.dumps(labels, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -122,6 +162,14 @@ def check(items_path: Path = ITEMS, labels_path: Path = LABELS) -> list[str]:
         problems += [f"{item['item_id']}: {fm!r} is not a failure-mode code like FM-03"
                      for fm in item.get("failure_modes") or []
                      if not str(fm).startswith("UNMAPPED:") and not FM_CODE.fullmatch(str(fm))]
+    for cid, lbl in labels.items():
+        if isinstance(lbl, dict) and "failure_modes" in lbl:
+            if not isinstance(lbl["failure_modes"], list):
+                problems.append(f"labels[{cid}]: failure_modes is not a list")
+            else:
+                for code in lbl["failure_modes"]:
+                    if not FM_CODE.fullmatch(str(code)):
+                        problems.append(f"labels[{cid}]: invalid FM code {code!r}")
     ids = [it.get("item_id") for it in items]
     problems += [f"{i}: duplicate item_id" for i in sorted({i for i in ids if ids.count(i) > 1})]
     cids = [it.get("claim_id") for it in items]
