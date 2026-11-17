@@ -44,8 +44,40 @@ def slice_check(pr: dict, base: dict, spec: dict) -> tuple[list[str], list[str]]
       - fail if below "min", or if no_significant_drop and the paired CI over the slice's items
         lies entirely below 0
     Return (blocked ids like "slice:money_movement/pass_rate", report lines)."""
-    # TODO M5
-    return [], []
+    blocked: list[str] = []
+    lines: list[str] = []
+    bs = spec.get("bootstrap", {})
+    for s in spec.get("slices", []):
+        name = s["name"]
+        metric = s.get("metric", "pass_rate")
+        mid = f"slice:{name}/{metric}"
+        items_pr = per_item(pr, metric, slice_name=name)
+        val = round(sum(items_pr.values()) / len(items_pr), 4) if items_pr else None
+        th = {k: v for k, v in s.items() if k not in ("name", "metric", "blocking")}
+        verdict, note = "ok", ""
+        if val is None:
+            verdict = "missing"
+        elif "min" in s and val < s["min"]:
+            verdict = "fail"
+        if s.get("no_significant_drop") and items_pr:
+            items_base = per_item(base, metric, slice_name=name)
+            keys = sorted(set(items_pr) & set(items_base))
+            if keys:
+                d, lo, hi = stats.paired_bootstrap(
+                    [items_pr[k] for k in keys],
+                    [items_base[k] for k in keys],
+                    n_resamples=bs.get("n_resamples", 1000),
+                    rng=bs.get("rng", 2027),
+                )
+                note = f"Δ {d:+.3f} CI [{lo:+.3f}, {hi:+.3f}]"
+                if hi < 0:
+                    verdict = "fail"
+        blocking = s.get("blocking", True)
+        if verdict != "ok" and blocking:
+            blocked.append(mid)
+        label = {"ok": "ok", "missing": "MISSING"}.get(verdict, "BLOCK" if blocking else "warn")
+        lines.append(f"  {mid:<22} {val!s:<8} {json.dumps(th):<40} {note:<28} {label}")
+    return blocked, lines
 
 
 def check(pr: dict, base: dict, spec: dict, base_spec: dict | None = None) -> tuple[list[str], list[str]]:
@@ -111,8 +143,13 @@ def main(argv: list[str] | None = None) -> int:
         base_path = pr_path
     pr = json.loads(pr_path.read_text(encoding="utf-8"))
     base = json.loads(base_path.read_text(encoding="utf-8"))
+    spec_path = Path(args.spec)
+    if args.spec == str(SPEC) and (pr.get("manifest", {}).get("metric_spec_version") == "2.0"
+                                   or "v2" in str(pr.get("manifest", {}).get("eval_set", ""))):
+        if Path("config/metric_spec_v2.yaml").is_file():
+            spec_path = Path("config/metric_spec_v2.yaml")
     base_spec = load_spec(Path(args.base_spec)) if args.base_spec else None
-    blocked, lines = check(pr, base, load_spec(Path(args.spec)), base_spec)
+    blocked, lines = check(pr, base, load_spec(spec_path), base_spec)
     print(f"gate: PR {pr['run_id']} vs main {base['run_id']} · eval set {pr['manifest']['eval_set_sha']}")
     print("\n".join(lines))
     if blocked:

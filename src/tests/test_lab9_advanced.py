@@ -31,6 +31,13 @@ def test_pass_k_rejects_bad_args(stats):
             stats.pass_at_k(*args)
 
 
+def test_m6_adversarial_traps():
+    """Checkpoint M6: verify eval set v2 and adversarial pack integrity."""
+    from lab9 import evalset
+    problems = evalset.check(evalset.ITEMS_V2, evalset.LABELS_V2)
+    assert problems == []
+
+
 def _report(rows, metrics, items=4, seeds=(1, 2)):
     return {"manifest": {"eval_set_sha": "x", "items": items, "seeds": list(seeds)},
             "rows": rows, "metrics": metrics, "evaluator_failures": []}

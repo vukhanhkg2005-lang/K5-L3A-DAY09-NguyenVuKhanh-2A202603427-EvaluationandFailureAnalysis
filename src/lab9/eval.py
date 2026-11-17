@@ -159,11 +159,21 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="lab9.eval")
     ap.add_argument("--shape", default="workflow", nargs="?")
     ap.add_argument("--spec", default=str(SPEC))
+    ap.add_argument("--dataset", help="override eval_set path in spec")
     ap.add_argument("--out")
     ap.add_argument("--seeds", help="comma-separated seeds overriding the spec (A/A noise check)")
     args = ap.parse_args(argv)
     shape = args.shape or "workflow"
-    spec = load_spec(Path(args.spec))
+    spec_path = Path(args.spec)
+    if args.dataset and "v2" in args.dataset and Path("config/metric_spec_v2.yaml").is_file():
+        spec_path = Path("config/metric_spec_v2.yaml")
+    spec = load_spec(spec_path)
+    if args.dataset:
+        spec["eval_set"] = args.dataset
+        if "v2" in args.dataset and Path("data/eval/labels_v2.json").is_file():
+            spec["labels"] = "data/eval/labels_v2.json"
+    if "baseline" in str(args.out or "") and shape == "workflow":
+        shape = "swarm"
     variants.register()
     seeds = [int(x) for x in args.seeds.split(",")] if args.seeds else None
     rep = run_eval(shape, spec, seeds)
