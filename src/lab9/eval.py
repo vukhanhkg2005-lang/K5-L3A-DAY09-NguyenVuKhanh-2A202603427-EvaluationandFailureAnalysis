@@ -157,16 +157,17 @@ def per_item(report: dict[str, Any], metric: str, slice_name: str | None = None)
 def main(argv: list[str] | None = None) -> int:
     utf8_stdio()
     ap = argparse.ArgumentParser(prog="lab9.eval")
-    ap.add_argument("--shape", required=True)
+    ap.add_argument("--shape", default="workflow", nargs="?")
     ap.add_argument("--spec", default=str(SPEC))
     ap.add_argument("--out")
     ap.add_argument("--seeds", help="comma-separated seeds overriding the spec (A/A noise check)")
     args = ap.parse_args(argv)
+    shape = args.shape or "workflow"
     spec = load_spec(Path(args.spec))
     variants.register()
     seeds = [int(x) for x in args.seeds.split(",")] if args.seeds else None
-    rep = run_eval(args.shape, spec, seeds)
-    out = Path(args.out or f"reports/eval_{args.shape}.json")
+    rep = run_eval(shape, spec, seeds)
+    out = Path(args.out or f"reports/eval_{shape}.json")
     m = rep["manifest"]
     print(f"{rep['run_id']} · eval set {m['eval_set_sha']} · {m['items']} item × {len(m['seeds'])} seed · {m['llm']}")
     for k, v in rep["metrics"].items():
@@ -182,4 +183,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    import os
+    os._exit(main())

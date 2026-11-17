@@ -74,7 +74,55 @@ def paired_bootstrap(a: Sequence[float], b: Sequence[float], *, n_resamples: int
     Return (mean(a)-mean(b), lo, hi) with scipy.stats.bootstrap(paired=True, method="percentile",
     rng=numpy.random.default_rng(rng)). If a == b everywhere return (0.0, 0.0, 0.0)."""
     # TODO M4
-    raise NotImplementedError
+    if len(a) != len(b):
+        raise ValueError(f"Length mismatch: {len(a)} != {len(b)}")
+    if not a:
+        return (0.0, 0.0, 0.0)
+    if list(a) == list(b):
+        return (0.0, 0.0, 0.0)
+
+    import numpy as np
+    from scipy.stats import bootstrap
+
+    arr_a = np.array(a, dtype=float)
+    arr_b = np.array(b, dtype=float)
+    diff = float(np.mean(arr_a) - np.mean(arr_b))
+
+    def diff_mean(x, y, axis=-1):
+        return np.mean(x, axis=axis) - np.mean(y, axis=axis)
+
+    res = bootstrap(
+        (arr_a, arr_b),
+        diff_mean,
+        paired=True,
+        method="percentile",
+        n_resamples=n_resamples,
+        random_state=np.random.default_rng(rng),
+        confidence_level=confidence,
+    )
+    lo = float(res.confidence_interval.low)
+    hi = float(res.confidence_interval.high)
+    return (diff, lo, hi)
+
+
+def bootstrap_ci(data: Sequence[float], num_samples: int = 1000, ci: float = 0.95) -> tuple[float, float]:
+    """Calculate (lower_bound, upper_bound) for the mean of data via bootstrap resampling."""
+    if not data:
+        return (0.0, 0.0)
+    import numpy as np
+    from scipy.stats import bootstrap
+
+    arr = np.array(data, dtype=float)
+    if np.all(arr == arr[0]):
+        return (float(arr[0]), float(arr[0]))
+    res = bootstrap(
+        (arr,),
+        np.mean,
+        method="percentile",
+        n_resamples=num_samples,
+        confidence_level=ci,
+    )
+    return (float(res.confidence_interval.low), float(res.confidence_interval.high))
 
 
 def pass_at_k(n: int, c: int, k: int) -> float:

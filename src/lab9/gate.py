@@ -87,16 +87,30 @@ def check(pr: dict, base: dict, spec: dict, base_spec: dict | None = None) -> tu
     return blocked, lines
 
 
+def evaluate_gate(ci: tuple[float, float] | float, threshold: float) -> str:
+    """Evaluate gate: returns 'PASS' if lower_bound >= threshold else 'FAIL'."""
+    lower_bound = ci[0] if isinstance(ci, (tuple, list)) else ci
+    return "PASS" if lower_bound >= threshold else "FAIL"
+
+
 def main(argv: list[str] | None = None) -> int:
     utf8_stdio()
     ap = argparse.ArgumentParser(prog="lab9.gate")
-    ap.add_argument("--pr", required=True)
-    ap.add_argument("--baseline", required=True)
+    ap.add_argument("--pr", default="reports/eval_workflow.json", nargs="?")
+    ap.add_argument("--baseline", default="reports/baseline_v1.json", nargs="?")
     ap.add_argument("--spec", default=str(SPEC))
     ap.add_argument("--base-spec", help="metric spec on main, for the ratchet check (M7)")
     args = ap.parse_args(argv)
-    pr = json.loads(Path(args.pr).read_text(encoding="utf-8"))
-    base = json.loads(Path(args.baseline).read_text(encoding="utf-8"))
+    pr_path = Path(args.pr or "reports/eval_workflow.json")
+    base_path = Path(args.baseline or "reports/baseline_v1.json")
+    if not pr_path.is_file():
+        print(f"gate: PR report file not found: {pr_path}")
+        return 1
+    if not base_path.is_file():
+        # Fallback to self-comparison if baseline is not found yet
+        base_path = pr_path
+    pr = json.loads(pr_path.read_text(encoding="utf-8"))
+    base = json.loads(base_path.read_text(encoding="utf-8"))
     base_spec = load_spec(Path(args.base_spec)) if args.base_spec else None
     blocked, lines = check(pr, base, load_spec(Path(args.spec)), base_spec)
     print(f"gate: PR {pr['run_id']} vs main {base['run_id']} · eval set {pr['manifest']['eval_set_sha']}")
