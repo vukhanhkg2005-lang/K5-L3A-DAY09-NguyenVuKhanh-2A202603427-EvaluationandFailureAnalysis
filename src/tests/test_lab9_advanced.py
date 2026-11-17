@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-# pytestmark = pytest.mark.student
+pytestmark = pytest.mark.student
 
 
 @pytest.fixture(scope="module")
