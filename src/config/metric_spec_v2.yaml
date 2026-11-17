@@ -20,5 +20,5 @@ metrics:
   - {id: cost_per_success,      kind: system,     level: system,     grader: lab8.metrics.summarize, threshold: {max_increase: 0.10}, blocking: false}
 slices:
   - {name: denial, metric: pass_rate, min: 0.90, no_significant_drop: true, blocking: true}
-  - {name: money_movement, metric: pass_rate, min: 0.85, no_significant_drop: true, blocking: true}
+  - {name: money_movement, metric: pass_rate, min: 0.95, no_significant_drop: true, blocking: true}
   - {name: adversarial, metric: pass_rate, min: 0.80, no_significant_drop: true, blocking: true}
